@@ -1,0 +1,23 @@
+{
+  "skill_name": "shadcn-vue",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Ajoute une modale de confirmation de suppression sur la page d'accueil, avec un bouton rouge 'Supprimer' et un bouton 'Annuler'.",
+      "expected_output": "Uses the CLI to add alert-dialog/button, composes them with as-child, uses the destructive variant, checks package.json after the CLI run, runs type-check/lint.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "je veux une variante 'success' verte pour le Button, qui marche aussi en dark mode",
+      "expected_output": "Adds --success tokens in :root and .dark, maps them in @theme inline, adds a success variant in the button cva definition, uses semantic tokens rather than raw green-600.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Fais un formulaire de login (email + mot de passe) avec validation, en utilisant les composants du projet.",
+      "expected_output": "Adds form/input/button via CLI, uses vee-validate + zod schema, FormField/FormItem/FormMessage, verifies with type-check and build.",
+      "files": []
+    }
+  ]
+}
