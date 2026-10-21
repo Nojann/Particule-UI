@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
 import { useColorMode } from '@vueuse/core'
-import { Moon, Sun } from '@lucide/vue'
+import { LogOut, Moon, Sun } from '@lucide/vue'
 
 import { Button } from '@/components/ui/button'
+import { useAuthStore } from '@/stores/auth'
 
 const navLinks = [{ to: '/', label: 'Accueil' }]
 
+const auth = useAuthStore()
+const router = useRouter()
 const colorMode = useColorMode()
 
 function toggleColorMode() {
   colorMode.value = colorMode.value === 'dark' ? 'light' : 'dark'
+}
+
+async function logout() {
+  auth.logout()
+  await router.push({ name: 'login' })
 }
 </script>
 
@@ -28,16 +36,35 @@ function toggleColorMode() {
           </Button>
         </nav>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          class="ml-auto"
-          aria-label="Basculer le thème clair / sombre"
-          @click="toggleColorMode"
-        >
-          <Sun v-if="colorMode === 'dark'" />
-          <Moon v-else />
-        </Button>
+        <div class="ml-auto flex items-center gap-2">
+          <template v-if="auth.user">
+            <span class="hidden text-sm text-muted-foreground sm:inline">
+              {{ auth.user.full_name || auth.user.email }}
+            </span>
+            <Button variant="ghost" size="sm" @click="logout">
+              <LogOut />
+              Déconnexion
+            </Button>
+          </template>
+          <template v-else>
+            <Button variant="ghost" size="sm" as-child>
+              <RouterLink to="/login">Connexion</RouterLink>
+            </Button>
+            <Button size="sm" as-child>
+              <RouterLink to="/signup">Créer un compte</RouterLink>
+            </Button>
+          </template>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Basculer le thème clair / sombre"
+            @click="toggleColorMode"
+          >
+            <Sun v-if="colorMode === 'dark'" />
+            <Moon v-else />
+          </Button>
+        </div>
       </div>
     </header>
 
