@@ -38,7 +38,7 @@ function redirectTarget() {
   const redirect = route.query.redirect
   return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//')
     ? redirect
-    : '/'
+    : '/app'
 }
 
 const onSubmit = handleSubmit(async ({ email, password }) => {

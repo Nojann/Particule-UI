@@ -47,7 +47,7 @@ const onSubmit = handleSubmit(async ({ full_name, email, password }) => {
   errorMessage.value = null
   try {
     await auth.signup({ email, password, full_name: full_name || undefined })
-    await router.push('/')
+    await router.push({ name: 'knowledge-bases' })
   } catch (error) {
     errorMessage.value =
       error instanceof ApiError && error.status === 400

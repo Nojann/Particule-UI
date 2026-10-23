@@ -10,8 +10,10 @@ declare module 'vue-router' {
     title?: string
     /** Redirects anonymous users to the login page */
     requiresAuth?: boolean
-    /** Redirects signed-in users to the home page (login, signup) */
+    /** Redirects signed-in users to the app (home, login, signup) */
     guestOnly?: boolean
+    /** Shell rendered by App.vue: public site (default), standalone login/signup, or the app */
+    layout?: 'public' | 'auth' | 'app'
   }
 }
 
@@ -22,18 +24,45 @@ const router = createRouter({
       path: '/',
       name: 'home',
       component: () => import('@/views/HomeView.vue'),
+      meta: { guestOnly: true },
+    },
+    {
+      // The home page content, still reachable once signed in
+      path: '/about',
+      name: 'about',
+      component: () => import('@/views/HomeView.vue'),
+      meta: { title: 'À propos' },
     },
     {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
-      meta: { title: 'Connexion', guestOnly: true },
+      meta: { title: 'Connexion', guestOnly: true, layout: 'auth' },
     },
     {
       path: '/signup',
       name: 'signup',
       component: () => import('@/views/SignupView.vue'),
-      meta: { title: 'Créer un compte', guestOnly: true },
+      meta: { title: 'Créer un compte', guestOnly: true, layout: 'auth' },
+    },
+    {
+      path: '/app',
+      component: () => import('@/views/KnowledgeBaseLayout.vue'),
+      meta: { requiresAuth: true, layout: 'app' },
+      children: [
+        {
+          path: '',
+          name: 'knowledge-bases',
+          component: () => import('@/views/KnowledgeBasesView.vue'),
+          meta: { title: 'Bases de connaissances' },
+        },
+        {
+          path: ':kbId',
+          name: 'knowledge-base',
+          component: () => import('@/views/KnowledgeBaseView.vue'),
+          props: true,
+        },
+      ],
     },
   ],
 })
@@ -47,7 +76,7 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (to.meta.guestOnly && auth.isAuthenticated) return { name: 'home' }
+  if (to.meta.guestOnly && auth.isAuthenticated) return { name: 'knowledge-bases' }
 })
 
 router.afterEach((to) => {

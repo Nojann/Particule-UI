@@ -1,6 +1,12 @@
 <script setup lang="ts">
+import { RouterLink } from 'vue-router'
+
 import AtomAnimation from '@/components/AtomAnimation.vue'
 import { Button } from '@/components/ui/button'
+import { useAuthStore } from '@/stores/auth'
+
+// Also rendered at /about, where the visitor may be signed in
+const auth = useAuthStore()
 </script>
 
 <template>
@@ -12,7 +18,12 @@ import { Button } from '@/components/ui/button'
         des sources.
       </p>
       <div class="flex gap-2">
-        <Button>Commencer</Button>
+        <Button as-child>
+          <RouterLink v-if="auth.user" :to="{ name: 'knowledge-bases' }">
+            Ouvrir l'application
+          </RouterLink>
+          <RouterLink v-else :to="{ name: 'signup' }">Commencer</RouterLink>
+        </Button>
         <Button variant="outline">En savoir plus</Button>
       </div>
     </div>
