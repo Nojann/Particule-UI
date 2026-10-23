@@ -17,6 +17,12 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/lang-markdown": "^6.5.2",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@lezer/highlight": "^1.2.5",
     "@lucide/vue": "^1.61.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vee-validate/zod": "^4.15.1",

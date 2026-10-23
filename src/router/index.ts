@@ -57,7 +57,8 @@ const router = createRouter({
           meta: { title: 'Bases de connaissances' },
         },
         {
-          path: ':kbId',
+          // Particules list, with the particule `permalink` open (or a draft with `?nouvelle`)
+          path: ':kbId/:permalink?',
           name: 'knowledge-base',
           component: () => import('@/views/KnowledgeBaseView.vue'),
           props: true,

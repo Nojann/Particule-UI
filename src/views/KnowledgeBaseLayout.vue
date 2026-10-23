@@ -28,7 +28,8 @@ onMounted(async () => {
 <template>
   <SidebarProvider>
     <AppSidebar />
-    <SidebarInset>
+    <!-- Fixed height: the pages scroll inside, the particule panes each on their own -->
+    <SidebarInset class="h-svh">
       <header class="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger class="-ml-1" />
         <Separator orientation="vertical" class="mr-2 data-[orientation=vertical]:h-4" />
@@ -37,8 +38,8 @@ onMounted(async () => {
         </span>
       </header>
 
-      <main class="flex-1 p-4 md:p-6">
-        <p v-if="loadError" class="text-sm text-destructive">
+      <main class="min-h-0 flex-1 overflow-y-auto">
+        <p v-if="loadError" class="p-6 text-sm text-destructive">
           Impossible de charger vos bases de connaissances, réessayez plus tard.
         </p>
         <RouterView v-else />

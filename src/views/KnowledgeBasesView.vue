@@ -20,7 +20,7 @@ const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' })
   <!-- First launch: nothing in the sidebar yet, so the page carries the call to action -->
   <section
     v-else-if="knowledgeBases.items.length === 0"
-    class="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center"
+    class="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-16 text-center"
   >
     <div class="flex size-12 items-center justify-center rounded-full bg-muted">
       <Database class="size-6 text-muted-foreground" />
@@ -35,7 +35,7 @@ const dateFormat = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long' })
     </Button>
   </section>
 
-  <section v-else class="flex flex-col gap-6">
+  <section v-else class="flex flex-col gap-6 p-4 md:p-6">
     <div class="flex items-center justify-between gap-4">
       <h1 class="font-heading text-2xl font-semibold">Vos bases</h1>
       <Button size="sm" @click="createOpen = true">

@@ -13,4 +13,16 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  optimizeDeps: {
+    // Only reached through the lazy-loaded MarkdownEditor: without this, Vite discovers
+    // them on first use, re-optimizes, and the import in flight fails (504) until a reload
+    include: [
+      '@codemirror/commands',
+      '@codemirror/lang-markdown',
+      '@codemirror/language',
+      '@codemirror/state',
+      '@codemirror/view',
+      '@lezer/highlight',
+    ],
+  },
 })
