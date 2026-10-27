@@ -34,7 +34,7 @@ onMounted(async () => {
         <SidebarTrigger class="-ml-1" />
         <Separator orientation="vertical" class="mr-2 data-[orientation=vertical]:h-4" />
         <span class="truncate text-sm font-medium">
-          {{ currentKb?.name ?? 'Bases de connaissances' }}
+          {{ currentKb?.name ?? (route.name === 'sources' ? 'Sources' : 'Bases de connaissances') }}
         </span>
       </header>
 

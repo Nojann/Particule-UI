@@ -15,7 +15,7 @@ Particule builds **hybrid knowledge bases**:
    discovery.
 3. **Balance.** The split between cognitive stimulation and agentic automation must be
    deliberate and precise (see [AI features](#ai-features)).
-4. **Notions.** Notes are modelled as *particules*, inspired by Zettelkasten. In time
+4. **Notions.** Notes are modelled as _particules_, inspired by Zettelkasten. In time
    they should get a model of their own, so avoid hard-coding Zettelkasten assumptions.
 5. **Lasting use.** A knowledge base is built to be used again and again, not just as a
    place to take notes.
@@ -23,7 +23,8 @@ Particule builds **hybrid knowledge bases**:
    built yet.
 
 Current scope: auth, knowledge-base CRUD, particule list + autosaving Markdown editor,
-sources (read-only). Tags, links and the Sources page are placeholders ("Bientôt").
+sources (Sources page, DOI import, APA references, quick creation from a particule).
+Tags and links are placeholders ("Bientôt").
 
 ## AI features
 
@@ -54,7 +55,7 @@ draft). Details are in `docs/ARCHITECTURE.md`.
 ## Implementation rules
 
 - Vue `<script setup lang="ts">`, Composition API, setup-style Pinia stores, `@/` imports.
-- Match the existing style: short comments that explain *why*, and VueUse helpers over
+- Match the existing style: short comments that explain _why_, and VueUse helpers over
   hand-rolled code.
 - UI kit: shadcn-vue in `src/components/ui` (generated code, editable), `cn()` from
   `@/lib/utils`, Lucide icons. Tailwind v4 is configured in `src/style.css` (there is no
@@ -106,6 +107,10 @@ Deployment is not defined yet. There is no CI config in the repo.
 - **What Claude may do without asking:** run type-check, lint and tests, and start the
   app (dev server, Playwright) to verify a change.
 - **Ask first** before committing, pushing, opening a PR or adding a dependency.
+- **Explain shell commands.** Before running a Bash command, say in the reply what it does
+  and why it is needed for the task. Do not chain unrelated commands.
+- **No unverified downloads.** Do not fetch files from the internet (curl, wget, raw
+  GitHub…) into the repo. Use files shipped with an installed npm package, or ask first.
 
 ## Project management (autonomous programming)
 

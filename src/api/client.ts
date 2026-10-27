@@ -48,3 +48,15 @@ export async function request<T>(
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
+
+const PAGE_SIZE = 100
+
+// The API pages lists by `skip` / `limit`: fetch pages until one comes back short
+export async function listAll<T>(path: string, token: string) {
+  const all: T[] = []
+  for (let skip = 0; ; skip += PAGE_SIZE) {
+    const page = await request<T[]>(`${path}?skip=${skip}&limit=${PAGE_SIZE}`, { token })
+    all.push(...page)
+    if (page.length < PAGE_SIZE) return all
+  }
+}

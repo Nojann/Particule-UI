@@ -11,11 +11,20 @@ import {
 } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { useDebounceFn, useEventListener } from '@vueuse/core'
-import { ArrowLeft, Check, Link, LoaderCircle, MoreHorizontal, Trash2, TriangleAlert } from '@lucide/vue'
+import {
+  ArrowLeft,
+  Check,
+  Link,
+  LoaderCircle,
+  MoreHorizontal,
+  Trash2,
+  TriangleAlert,
+} from '@lucide/vue'
 
 import MarkdownEditorError from '@/components/MarkdownEditorError.vue'
 import MarkdownEditorLoading from '@/components/MarkdownEditorLoading.vue'
 import SourcePicker from '@/components/SourcePicker.vue'
+import SourceSheet from '@/components/SourceSheet.vue'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +47,7 @@ import type { Particule, ParticuleFields } from '@/api/particules'
 import { ApiError } from '@/api/client'
 import { PERMALINK_PATTERN, slugify } from '@/lib/slug'
 import { useParticulesStore } from '@/stores/particules'
+import { useSourcesStore } from '@/stores/sources'
 
 const SAVE_DELAY_MS = 1000
 
@@ -73,6 +83,7 @@ const emit = defineEmits<{
 }>()
 
 const particules = useParticulesStore()
+const sources = useSourcesStore()
 const router = useRouter()
 
 const fields = reactive<ParticuleFields>({
@@ -82,6 +93,9 @@ const fields = reactive<ParticuleFields>({
   origins: props.particule?.origins ?? '',
   source_id: props.particule?.source_id ?? null,
 })
+
+/** Editable from here, in a side sheet */
+const chosenSource = computed(() => sources.byId(fields.source_id))
 
 /** Last version the server confirmed; null while the particule is a draft */
 let saved: Particule | null = props.particule
@@ -253,7 +267,10 @@ async function onDelete() {
   <article class="flex h-full flex-col">
     <header class="flex h-12 shrink-0 items-center gap-2 border-b px-4">
       <Button v-if="showBack" variant="ghost" size="icon" class="-ml-2" as-child>
-        <RouterLink :to="{ name: 'knowledge-base', params: { kbId } }" aria-label="Retour à la liste">
+        <RouterLink
+          :to="{ name: 'knowledge-base', params: { kbId } }"
+          aria-label="Retour à la liste"
+        >
           <ArrowLeft />
         </RouterLink>
       </Button>
@@ -327,7 +344,10 @@ async function onDelete() {
             />
           </dd>
           <template v-if="permalinkError || permalinkFollowsTitle">
-            <dd class="col-start-2 px-2 text-xs" :class="permalinkError ? 'text-destructive' : 'text-muted-foreground'">
+            <dd
+              class="col-start-2 px-2 text-xs"
+              :class="permalinkError ? 'text-destructive' : 'text-muted-foreground'"
+            >
               {{ permalinkError ?? 'Suit le titre jusqu’à la création, puis ne change plus.' }}
             </dd>
           </template>
@@ -344,8 +364,9 @@ async function onDelete() {
           </dd>
 
           <dt class="text-muted-foreground">Source</dt>
-          <dd class="min-w-0">
+          <dd class="flex min-w-0 items-center gap-1">
             <SourcePicker v-model="fields.source_id" />
+            <SourceSheet v-if="chosenSource" :source="chosenSource" />
           </dd>
         </dl>
 
@@ -363,7 +384,9 @@ async function onDelete() {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Supprimer « {{ fields.title || 'Sans titre' }} » ?</AlertDialogTitle>
-          <AlertDialogDescription>Cette particule sera supprimée définitivement.</AlertDialogDescription>
+          <AlertDialogDescription
+            >Cette particule sera supprimée définitivement.</AlertDialogDescription
+          >
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Annuler</AlertDialogCancel>

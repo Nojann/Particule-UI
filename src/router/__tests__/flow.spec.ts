@@ -63,4 +63,22 @@ describe('public site / app flow', () => {
     expect(router.currentRoute.value.name).toBe('login')
     expect(router.currentRoute.value.query.redirect).toBe('/app/kb1')
   })
+
+  it('opens the sources page rather than a knowledge base named "sources"', () => {
+    expect(router.resolve('/app/sources').name).toBe('sources')
+    const one = router.resolve('/app/sources/s1')
+    expect(one.name).toBe('sources')
+    expect(one.params.sourceId).toBe('s1')
+    expect(router.resolve('/app/kb1/entropy').name).toBe('knowledge-base')
+  })
+
+  it('opens a new source and a new particule with ?new', () => {
+    expect(router.resolve({ name: 'sources', query: { new: null } }).fullPath).toBe(
+      '/app/sources?new',
+    )
+    expect(
+      router.resolve({ name: 'knowledge-base', params: { kbId: 'kb1' }, query: { new: null } })
+        .fullPath,
+    ).toBe('/app/kb1?new')
+  })
 })

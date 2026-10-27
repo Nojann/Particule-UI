@@ -45,8 +45,8 @@ onMounted(() => {
   if (!sources.loaded) sources.fetchAll().catch(() => {})
 })
 
-/** `?nouvelle` opens a draft */
-const isDraft = computed(() => !props.permalink && 'nouvelle' in route.query)
+/** `?new` opens a draft */
+const isDraft = computed(() => !props.permalink && 'new' in route.query)
 
 /**
  * The particule the editor moved to a new permalink. The store already has the new
@@ -106,7 +106,7 @@ async function onDelete(particule: Particule | null) {
 }
 
 function createParticule() {
-  void router.push({ name: 'knowledge-base', params: { kbId: props.kbId }, query: { nouvelle: null } })
+  void router.push({ name: 'knowledge-base', params: { kbId: props.kbId }, query: { new: null } })
 }
 </script>
 
@@ -124,7 +124,11 @@ function createParticule() {
     </ResizablePanel>
     <ResizableHandle />
     <ResizablePanel :default-size="70" class="flex flex-col">
-      <p v-if="deleteError" role="alert" class="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
+      <p
+        v-if="deleteError"
+        role="alert"
+        class="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive"
+      >
         {{ deleteError }}
       </p>
       <template v-if="editorOpen">
@@ -137,7 +141,10 @@ function createParticule() {
           @moved="onMoved"
           @delete="onDelete"
         />
-        <div v-else-if="!particules.loaded" class="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-20">
+        <div
+          v-else-if="!particules.loaded"
+          class="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-20"
+        >
           <Skeleton class="h-9 w-1/2" />
           <Skeleton class="h-4 w-full" />
           <Skeleton class="h-4 w-5/6" />
@@ -168,7 +175,11 @@ function createParticule() {
 
   <!-- Mobile: one pane at a time -->
   <template v-else>
-    <p v-if="deleteError" role="alert" class="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">
+    <p
+      v-if="deleteError"
+      role="alert"
+      class="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive"
+    >
       {{ deleteError }}
     </p>
     <ParticuleEditor
