@@ -52,10 +52,12 @@ src/
 ├── App.vue              Picks the layout shell from route.meta.layout
 ├── style.css            Tailwind v4 entry, theme tokens (light/dark), base styles
 ├── api/                 HTTP layer
-│   ├── client.ts        request<T>() + ApiError
+│   ├── client.ts        request<T>() + ApiError, paginated listAll()
 │   ├── auth.ts          login, signup, getMe
 │   ├── knowledgeBases.ts
-│   └── particules.ts    particules + sources, paginated listAll()
+│   ├── particules.ts
+│   ├── sources.ts
+│   └── doi.ts           DOI metadata from doi.org (the only third-party call)
 ├── stores/              Pinia stores
 │   ├── auth.ts          token (localStorage) + current user
 │   ├── knowledgeBases.ts
@@ -70,6 +72,11 @@ src/
 └── lib/
     ├── slug.ts          slugify, PERMALINK_PATTERN, excerpt
     ├── markdownLivePreview.ts   CodeMirror extension
+    ├── contributors.ts  authors/editors ↔ the API's free text, in-text labels
+    ├── sourceForm.ts    source types, form schema, payload, diff, toCsl()
+    ├── doi.ts           normalise, detect and extract DOIs
+    ├── cslImport.ts     CSL-JSON (doi.org) → source fields
+    ├── citation.ts      APA through citation-js, lazy-loaded
     └── utils.ts         cn() class merger
 e2e/                     Playwright tests
 specs/api.md             pointer to the API documentation
@@ -104,7 +111,10 @@ Defined in `src/router/index.ts`. Every view is lazy-loaded.
 | `/signup`                 | `signup`           | `SignupView`                                 | `guestOnly`, `auth` layout |
 | `/app`                    | –                  | `KnowledgeBaseLayout` (parent)               | `requiresAuth`, `app`      |
 | `/app/`                   | `knowledge-bases`  | `KnowledgeBasesView`                         |                            |
+| `/app/sources/:sourceId?` | `sources`          | `SourcesView` (route params as props)        |                            |
 | `/app/:kbId/:permalink?`  | `knowledge-base`   | `KnowledgeBaseView` (route params as props)  |                            |
+
+`sources` is declared **before** `knowledge-base`, which would match `/app/sources` too.
 
 `RouteMeta` is augmented with typed fields: `title`, `requiresAuth`, `guestOnly`,
 `layout`.
@@ -119,9 +129,10 @@ Defined in `src/router/index.ts`. Every view is lazy-loaded.
 - `afterEach`: sets `document.title` to `"<title> · Particule"`.
 
 **URL as state.** The open particule is part of the URL (`/app/<kbId>/<permalink>`),
-and `?nouvelle` opens a new draft. Selection, deep links, back/forward and "copy
-link" therefore all go through the router. No store keeps a separate "selected
-particule" field.
+and `?new` opens a new draft. The same goes for sources: `/app/sources/<id>`, `?new`
+for the quick add, `?new&manual` for the full form. Selection, deep links,
+back/forward and "copy link" therefore all go through the router. No store keeps a
+separate "selected particule" or "selected source" field.
 
 ## API layer
 
@@ -137,11 +148,19 @@ particule" field.
   FastAPI's `{"detail": ...}`, including the list form returned on 422. A 204
   response resolves to `undefined`.
 
-The resource modules (`auth.ts`, `knowledgeBases.ts`, `particules.ts`) are thin typed
-wrappers around `request`. Each one declares the API's response types
-(snake_case, as the server sends them). `particules.ts` has a `listAll()` helper
-that follows the API's `skip`/`limit` pagination (pages of 100) until a page comes
-back short.
+The resource modules (`auth.ts`, `knowledgeBases.ts`, `particules.ts`, `sources.ts`)
+are thin typed wrappers around `request`. Each one declares the API's response types
+(snake_case, as the server sends them). `client.ts` has a `listAll()` helper that
+follows the API's `skip`/`limit` pagination (pages of 100) until a page comes back
+short.
+
+**Third party: `api/doi.ts`.** It is the only module that calls a service other than
+the Particule API. `lookupDoi(doi)` asks `https://doi.org/<doi>` for CSL-JSON
+(`Accept: application/vnd.citationstyles.csl+json`; doi.org allows CORS), with plain
+`fetch` and a 10 s timeout, and turns it into API-ready `SourceFields` through
+`lib/cslImport.ts`. Failures throw `DoiError` (`invalid`, `not_found`,
+`unreachable`); components may import it, like `ApiError`. DOI lookup belongs to the
+front end by design: the Particule API has no endpoint for it.
 
 ## State (Pinia stores)
 
@@ -176,9 +195,22 @@ Holds the particules of **one** knowledge base, the one currently open (`kbId`):
 
 ### `sources`
 
-The user's bibliographic sources. They are read-only in the UI for now, and are only
-used to label particules and fill the `SourcePicker`. They are loaded lazily, and
-failing to load them is not fatal.
+The user's sources, shared by all their knowledge bases. They are loaded lazily, and
+failing to load them is not fatal on the particules screen.
+
+- `create()`, `update()` and `remove()` patch the local list, sorted as the server
+  sorts it (title, then year, undated last). `remove()` also clears `source_id` on
+  the loaded particules, as the server does.
+- `findByDoi()` compares normalised, case-insensitive DOIs, so the quick add can
+  offer an existing source instead of a duplicate.
+- `lookupDoi()` delegates to `api/doi.ts`. It saves nothing.
+- `draft` hands an imported source with no title from the quick add to the full form
+  on the sources page.
+
+There are two families of sources. **Academic** types (`book`, `journal_article`,
+`book_chapter`, `web_page`) have authors and an APA reference. **`other`** (a video, a
+podcast, a conversation…) has only a title, a link and a note. Every source has a
+`note`: the user's own words about it.
 
 ## The knowledge-base screen
 
@@ -191,7 +223,8 @@ KnowledgeBaseLayout            SidebarProvider + AppSidebar + header, loads KBs
     └── KnowledgeBaseView      loads particules for :kbId
         ├── ParticuleList      filter, ↑/↓ navigation, "/" shortcut
         └── ParticuleEditor    title, permalink, origins, source, content
-            ├── SourcePicker   combobox over the sources store
+            ├── SourcePicker   combobox over the sources store, creates sources too
+            ├── SourceSheet    side sheet with the SourceEditor of the cited source
             └── MarkdownEditor (async) CodeMirror 6
 ```
 
@@ -201,8 +234,39 @@ KnowledgeBaseLayout            SidebarProvider + AppSidebar + header, loads KBs
 - **Filtering** happens on the client: the API has no search endpoint. It matches
   title and content, ignoring case and accents.
 - **Sidebar** (`AppSidebar`): the knowledge-base list with create / rename / delete
-  dialogs, a "Bibliothèque" section (Tags, Liens, Sources, all marked "Bientôt", not
+  dialogs, a "Bibliothèque" section (Sources; Tags and Liens are marked "Bientôt", not
   built yet), and the account menu (theme, À propos, logout).
+
+## The sources screen
+
+```
+SourcesView                    loads the sources, one pane at a time on mobile
+├── SourceList                 filter, ↑/↓ navigation, "/" shortcut
+├── SourceQuickAdd             ?new: « Académique » (DOI) or « Autre » (title, link, note)
+└── SourceEditor               ?new&manual or :sourceId, autosaved
+    ├── ApaReference           citation-js, lazy-loaded
+    └── ContributorsField      ordered authors / editors
+```
+
+- **Quick add first.** Entering a full APA form is slow, so a new source starts from
+  `SourceQuickAdd`. A pasted DOI is looked up, its APA reference shown and, on the
+  sources page, the source added at once with its steps listed (an import with no title
+  goes to the full form instead). The full form stays one link away, for a reference
+  without a DOI. The same component runs in the `SourcePicker` popover, where adding
+  also cites, so it waits for « Ajouter et citer ».
+- **Reference first.** For an academic source, `SourceEditor` shows the reference,
+  then the form in a collapsible « Corriger les informations ». It starts folded for a
+  saved, valid source, and unfolds on its own when a save finds the form invalid. An
+  `other` source gets a short form with no reference.
+- **Saved only when valid.** `SourceEditor` autosaves like `ParticuleEditor` (1 s
+  debounce, one save at a time, `PATCH` of the changed fields, save on unmount), but
+  sends nothing while the zod schema refuses the form: a new source is created on the
+  server the first time it is valid. As on the server, only the title is required;
+  `missingForApa` lists what the APA reference still lacks, shown as a notice that
+  never blocks the save.
+- **citation-js** is only imported by `lib/citation.ts`, dynamically, the first time a
+  reference is shown. Its HTML output is reduced to text and italics, and rendered
+  without `v-html`.
 
 ### Editor save model
 

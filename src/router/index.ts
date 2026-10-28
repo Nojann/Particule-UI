@@ -57,7 +57,16 @@ const router = createRouter({
           meta: { title: 'Bases de connaissances' },
         },
         {
-          // Particules list, with the particule `permalink` open (or a draft with `?nouvelle`)
+          // The user's sources, with the source `sourceId` open (or a new one with `?new`).
+          // Declared before the knowledge base route, which would match `/app/sources` too
+          path: 'sources/:sourceId?',
+          name: 'sources',
+          component: () => import('@/views/SourcesView.vue'),
+          props: true,
+          meta: { title: 'Sources' },
+        },
+        {
+          // Particules list, with the particule `permalink` open (or a draft with `?new`)
           path: ':kbId/:permalink?',
           name: 'knowledge-base',
           component: () => import('@/views/KnowledgeBaseView.vue'),

@@ -23,6 +23,9 @@ export default defineConfig({
       '@codemirror/state',
       '@codemirror/view',
       '@lezer/highlight',
+      // Only reached through lib/citation.ts, imported dynamically, for the same reason
+      '@citation-js/core',
+      '@citation-js/plugin-csl',
     ],
   },
 })

@@ -52,11 +52,10 @@ import type { KnowledgeBase } from '@/api/knowledgeBases'
 import { useAuthStore } from '@/stores/auth'
 import { useKnowledgeBasesStore } from '@/stores/knowledgeBases'
 
-// Tags, links and sources belong to the user, not to a knowledge base; no page for them yet
-const libraryItems = [
+// Tags, links and sources belong to the user, not to a knowledge base; tags and links have no page yet
+const upcomingLibraryItems = [
   { label: 'Tags', icon: Tag },
   { label: 'Liens', icon: Link },
-  { label: 'Sources', icon: BookOpen },
 ]
 
 const auth = useAuthStore()
@@ -179,7 +178,15 @@ async function logout() {
         <SidebarGroupLabel>Bibliothèque</SidebarGroupLabel>
         <SidebarGroupContent>
           <SidebarMenu>
-            <SidebarMenuItem v-for="item in libraryItems" :key="item.label">
+            <SidebarMenuItem>
+              <SidebarMenuButton as-child tooltip="Sources" :is-active="route.name === 'sources'">
+                <RouterLink :to="{ name: 'sources' }">
+                  <BookOpen />
+                  <span>Sources</span>
+                </RouterLink>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem v-for="item in upcomingLibraryItems" :key="item.label">
               <SidebarMenuButton :tooltip="item.label" aria-disabled="true">
                 <component :is="item.icon" />
                 <span>{{ item.label }}</span>
@@ -206,7 +213,9 @@ async function logout() {
                   {{ (auth.user?.full_name || auth.user?.email || '?').charAt(0) }}
                 </div>
                 <div class="grid flex-1 text-left text-sm leading-tight">
-                  <span class="truncate font-medium">{{ auth.user?.full_name || 'Mon compte' }}</span>
+                  <span class="truncate font-medium">{{
+                    auth.user?.full_name || 'Mon compte'
+                  }}</span>
                   <span class="truncate text-xs text-sidebar-foreground/70">
                     {{ auth.user?.email }}
                   </span>
@@ -214,7 +223,11 @@ async function logout() {
                 <ChevronsUpDown class="ml-auto" />
               </SidebarMenuButton>
             </DropdownMenuTrigger>
-            <DropdownMenuContent side="top" align="start" class="w-(--reka-dropdown-menu-trigger-width) min-w-56">
+            <DropdownMenuContent
+              side="top"
+              align="start"
+              class="w-(--reka-dropdown-menu-trigger-width) min-w-56"
+            >
               <DropdownMenuLabel class="truncate">{{ auth.user?.email }}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem @select="toggleColorMode">
