@@ -51,8 +51,11 @@ export const FIELDS_BY_TYPE: Record<SourceType, readonly OptionalField[]> = {
   other: ['url'],
 }
 
-/** Mirrors the API's REQUIRED_BY_TYPE */
-export const REQUIRED_BY_TYPE: Record<SourceType, readonly OptionalField[]> = {
+/**
+ * What an APA reference needs on top of the authors. The API only requires a title, so a
+ * source can be recorded before every detail is known: these are asked for, not enforced.
+ */
+export const APA_EXPECTED_BY_TYPE: Record<SourceType, readonly OptionalField[]> = {
   book: [],
   journal_article: ['container_title'],
   book_chapter: ['container_title'],
@@ -115,17 +118,6 @@ export const sourceFormSchema = z
     note: z.string(),
   })
   .superRefine((values, ctx) => {
-    if (isAcademic(values.type) && !values.authors.length) {
-      ctx.addIssue({ code: 'custom', path: ['authors'], message: 'Ajoutez au moins un auteur.' })
-    }
-    for (const field of REQUIRED_BY_TYPE[values.type]) {
-      if (!values[field])
-        ctx.addIssue({
-          code: 'custom',
-          path: [field],
-          message: 'Ce champ est requis pour ce type de source.',
-        })
-    }
     for (const field of ['authors', 'editors'] as const) {
       if (serializeContributors(values[field]).length > CONTRIBUTORS_MAX_LENGTH) {
         ctx.addIssue({
@@ -141,7 +133,8 @@ export function emptySourceForm(type: SourceType = 'book'): SourceFormValues {
   return {
     type,
     title: '',
-    authors: isAcademic(type) ? [{ kind: 'person', family: '', given: '' }] : [],
+    // No blank row: it would block the save, and authors are optional
+    authors: [],
     editors: [],
     container_title: '',
     volume: '',
@@ -156,6 +149,16 @@ export function emptySourceForm(type: SourceType = 'book'): SourceFormValues {
     publisher: '',
     note: '',
   }
+}
+
+/** What the APA reference still lacks, in form order; empty for an other source */
+export function missingForApa(values: SourceFormValues): ('authors' | OptionalField)[] {
+  if (!isAcademic(values.type)) return []
+  const missing: ('authors' | OptionalField)[] = values.authors.length ? [] : ['authors']
+  for (const field of APA_EXPECTED_BY_TYPE[values.type]) {
+    if (field !== 'editors' && !values[field].trim()) missing.push(field)
+  }
+  return missing
 }
 
 export function formFromSource(source: SourceFields): SourceFormValues {

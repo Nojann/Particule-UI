@@ -32,7 +32,7 @@ for (const { name, viewport, openSidebar } of screens) {
       await expect(page).toHaveURL(/\/app\/sources$/)
       await expect(page).toHaveTitle('Sources · Particule')
 
-      // Paste a doi.org link: the reference shows, nothing is created yet
+      // Paste a doi.org link: the source is found and added right away
       await page.getByRole('button', { name: 'Ajouter une source' }).click()
       await expect(page).toHaveURL(/\/app\/sources\?new$/)
       await expect(page.getByRole('radio', { name: 'Académique' })).toBeChecked()
@@ -46,11 +46,11 @@ for (const { name, viewport, openSidebar } of screens) {
       )
       await expect(reference.locator('em').first()).toHaveText(/Reviews of Modern Physics/)
       expect(api.calls).toContain(`DOI ${DOI}`)
-      expect(api.calls.filter((c) => c === 'POST /sources/')).toHaveLength(0)
 
-      // One click adds it, and its editor opens with the details folded
-      await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+      // No click needed: its editor opens with the details folded
       await expect(page).toHaveURL(/\/app\/sources\/s1$/)
+      expect(api.calls.filter((c) => c === 'POST /sources/')).toHaveLength(1)
+      await expect(page.getByText('Enregistré')).toBeVisible()
       expect(api.sources[0]).toMatchObject({
         type: 'journal_article',
         authors: 'Feynman, R. P.',
@@ -134,8 +134,9 @@ test('types a reference without a DOI by hand', async ({ page }) => {
   await page.goto('/app/sources?new')
   await page.getByRole('button', { name: 'Saisir la référence à la main' }).click()
 
-  // A book with two authors
+  // A book with two authors; it starts with none, since only the title is required
   await page.getByLabel('Titre', { exact: true }).fill('The Feynman lectures on physics')
+  await page.getByRole('button', { name: 'Ajouter un auteur' }).click()
   await page.getByPlaceholder('Nom', { exact: true }).fill('Feynman')
   await page.getByPlaceholder('Prénoms').fill('Richard P.')
   await page.getByRole('button', { name: 'Ajouter un auteur' }).click()
@@ -155,10 +156,14 @@ test('types a reference without a DOI by hand', async ({ page }) => {
   await expect(page.getByText('Enregistré', { exact: true })).toBeVisible()
   expect(api.calls.filter((c) => c === 'POST /sources/')).toHaveLength(1)
 
-  // A journal article needs its journal
+  // A journal article without its journal is saved, and the notice asks for it
   await page.getByRole('combobox', { name: 'Type de source' }).click()
   await page.getByRole('option', { name: 'Article de revue' }).click()
-  await expect(page.getByText('Champs requis manquants')).toBeVisible()
+  const notice = page.getByRole('status').filter({ hasText: 'Référence incomplète' })
+  await expect(notice.getByRole('listitem')).toHaveText(['Revue'])
+  await expect
+    .poll(() => api.sources[0])
+    .toMatchObject({ type: 'journal_article', container_title: null })
   await page.getByLabel('Revue').fill('Physics Today')
   await page.getByLabel('Volume').fill('20')
   await expect(reference).toHaveText(
@@ -171,4 +176,27 @@ test('types a reference without a DOI by hand', async ({ page }) => {
     volume: '20',
     publisher: null,
   })
+  await expect(notice).toHaveCount(0)
+})
+
+test('adds a DOI whose metadata lacks the authors, and completes it later', async ({ page }) => {
+  const api = await mockApi(page, { dois: { [DOI]: { ...feynman1948, author: [] } } })
+  await page.goto('/app/sources?new')
+
+  await page.getByLabel('DOI ou lien doi.org').fill(DOI)
+  await page.getByLabel('DOI ou lien doi.org').press('Enter')
+
+  // Added all the same: the editor opens, saved, and says what the reference lacks
+  await expect(page).toHaveURL(/\/app\/sources\/s1$/)
+  expect(api.sources[0]).toMatchObject({ doi: DOI, authors: null })
+  await expect(page.getByText('Enregistré', { exact: true })).toBeVisible()
+  const notice = page.getByRole('status').filter({ hasText: 'Référence incomplète' })
+  await expect(notice.getByRole('listitem')).toHaveText(['Auteurs'])
+
+  // The details are open: add the author, and the notice goes
+  await page.getByRole('button', { name: 'Ajouter un auteur' }).click()
+  await page.getByPlaceholder('Nom', { exact: true }).fill('Feynman')
+  await page.getByPlaceholder('Prénoms').fill('R. P.')
+  await expect(notice).toHaveCount(0)
+  await expect.poll(() => api.sources[0]).toMatchObject({ authors: 'Feynman, R. P.' })
 })

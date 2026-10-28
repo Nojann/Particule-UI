@@ -105,11 +105,35 @@ describe('SourceEditor', () => {
   it('sends nothing while the new source is invalid', async () => {
     const wrapper = mountEditor(null)
 
-    await wrapper.get('[aria-required="true"]').setValue('The Feynman lectures on physics')
+    // No title yet, and a malformed year
+    await wrapper.get('input[placeholder="s. d."]').setValue('19a4')
     await waitForSave()
 
     expect(fetchMock).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('Champs requis manquants')
+  })
+
+  it('creates a source from its title alone, and says what its reference lacks', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(201, { ...article, id: 's3', type: 'book', title: 'Lectures', authors: null }),
+    )
+    const wrapper = mountEditor(null)
+    expect(wrapper.get('[role="status"]').text()).toContain('Auteurs')
+
+    await wrapper.get('[aria-required="true"]').setValue('Lectures')
+    await waitForSave()
+
+    const [, post] = fetchMock.mock.calls[0]!
+    expect(post?.method).toBe('POST')
+    expect(JSON.parse(post!.body as string)).toMatchObject({
+      type: 'book',
+      title: 'Lectures',
+      authors: null,
+    })
+    expect(wrapper.text()).toContain('Enregistré')
+    expect(wrapper.get('[role="status"]').text()).toContain(
+      'Référence incomplète. Pour une référence APA complète, renseignez :',
+    )
   })
 
   it('creates the source once it is valid, then patches only what changed', async () => {
@@ -131,6 +155,7 @@ describe('SourceEditor', () => {
     const wrapper = mountEditor(null)
 
     await wrapper.get('[aria-required="true"]').setValue('Lectures')
+    await wrapper.findAll('button').find((b) => b.text() === 'Ajouter un auteur')!.trigger('click')
     await wrapper.get('input[placeholder="Nom"]').setValue('Feynman')
     await wrapper.get('input[placeholder="Prénoms"]').setValue('Richard')
     await waitForSave()
@@ -168,7 +193,19 @@ describe('SourceEditor', () => {
       pages: null,
       publisher: 'Addison-Wesley',
     }
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, { ...book, type: 'journal_article' }))
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(200, { ...book, type: 'journal_article', volume: '20', publisher: null }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          ...book,
+          type: 'journal_article',
+          volume: '20',
+          publisher: null,
+          container_title: 'Physics Today',
+        }),
+      )
     const wrapper = mountEditor(book)
     await openDetails(wrapper)
 
@@ -182,20 +219,25 @@ describe('SourceEditor', () => {
     await flushPromises()
     await wrapper.get('input[placeholder="Ex. 20"]').setValue('20')
     await waitForSave()
-    expect(wrapper.text()).toContain('Champs requis manquants')
+
+    // Saved without its journal: the notice asks for it
+    expect(wrapper.text()).not.toContain('Champs requis manquants')
+    const [, patch] = fetchMock.mock.calls[0]!
+    expect(JSON.parse(patch!.body as string)).toEqual({
+      type: 'journal_article',
+      volume: '20',
+      publisher: null,
+    })
+    expect(wrapper.get('[role="status"]').findAll('li').map((li) => li.text())).toEqual(['Revue'])
 
     const journalLabel = wrapper.findAll('label').find((l) => l.text() === 'Revue')!
     await wrapper.get(`#${journalLabel.attributes('for')}`).setValue('Physics Today')
     await waitForSave()
 
-    expect(wrapper.text()).not.toContain('Champs requis manquants')
-    const [, patch] = fetchMock.mock.calls[0]!
-    expect(JSON.parse(patch!.body as string)).toEqual({
-      type: 'journal_article',
+    expect(JSON.parse(fetchMock.mock.calls[1]![1]!.body as string)).toEqual({
       container_title: 'Physics Today',
-      volume: '20',
-      publisher: null,
     })
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
   })
 
   it('shows the fields of the source type', async () => {
@@ -225,10 +267,20 @@ describe('SourceEditor', () => {
   })
 
   it('unfolds the details of an imported source that lacks a required field', async () => {
-    const wrapper = mountEditor(null, { ...article, authors: null })
+    const wrapper = mountEditor(null, { ...article, authors: null, title: '' })
     await flushPromises()
     const titleInput = wrapper.get<HTMLInputElement>('input[aria-required="true"]')
-    expect(titleInput.element.value).toBe('Space-time approach')
+    expect(titleInput.element.value).toBe('')
+  })
+
+  it('unfolds the details of a saved source whose reference is incomplete', async () => {
+    const wrapper = mountEditor({ ...article, authors: null })
+    await flushPromises()
+    const trigger = wrapper.findAll('button').find((b) => b.text() === 'Corriger les informations')!
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('[role="status"]').findAll('li').map((li) => li.text())).toEqual([
+      'Auteurs',
+    ])
   })
 
   it('shows only title, link and note for an other source, and saves it without authors', async () => {

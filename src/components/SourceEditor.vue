@@ -9,6 +9,7 @@ import {
   Check,
   ChevronRight,
   ExternalLink,
+  Info,
   LoaderCircle,
   MoreHorizontal,
   Trash2,
@@ -57,11 +58,11 @@ import {
   ACADEMIC_TYPES,
   CONTAINER_TITLE_LABEL,
   FIELDS_BY_TYPE,
-  REQUIRED_BY_TYPE,
   changedFields,
   emptySourceForm,
   formFromSource,
   isAcademic,
+  missingForApa,
   payloadFromForm,
   sourceFormSchema,
   type OptionalField,
@@ -109,14 +110,16 @@ const academic = computed(() => isAcademic(values.type))
 
 /**
  * The reference comes first; its details unfold to fix them. They start open when there is
- * something to fill in: a new source typed by hand, or one the form doesn't accept.
+ * something to fill in: a new source typed by hand, one the form doesn't accept, or one
+ * whose reference lacks what APA needs.
  */
 const detailsOpen = ref(
-  !props.source || !sourceFormSchema.safeParse(formFromSource(props.source)).success,
+  !props.source ||
+    !sourceFormSchema.safeParse(formFromSource(props.source)).success ||
+    missingForApa(formFromSource(props.source)).length > 0,
 )
 
 const visible = computed(() => new Set<OptionalField>(FIELDS_BY_TYPE[values.type]))
-const required = computed(() => new Set<OptionalField>(REQUIRED_BY_TYPE[values.type]))
 
 // A full date sets the year, as the server does
 const yearFromDate = computed(() => Boolean(values.published_date))
@@ -241,6 +244,17 @@ const TEXT_FIELDS: {
   { name: 'url', label: 'URL', placeholder: 'https://…' },
 ]
 const textFields = computed(() => TEXT_FIELDS.filter((field) => visible.value.has(field.name)))
+
+/** Saved anyway: the API only needs a title. The notice says what the reference lacks. */
+const missing = computed(() =>
+  missingForApa(values).map((field) =>
+    field === 'authors'
+      ? 'Auteurs'
+      : field === 'container_title'
+        ? CONTAINER_TITLE_LABEL[values.type]
+        : (TEXT_FIELDS.find((f) => f.name === field)?.label ?? field),
+  ),
+)
 // Bound from the script: a literal `//` in the template trips vue-tsc's slot scoping
 const URL_PLACEHOLDER = 'https://…'
 </script>
@@ -311,6 +325,20 @@ const URL_PLACEHOLDER = 'https://…'
         <p v-if="serverError" role="alert" class="text-sm text-destructive">{{ serverError }}</p>
 
         <template v-if="academic">
+          <div
+            v-if="missing.length"
+            role="status"
+            class="flex gap-2 rounded-lg border border-dashed p-3 text-sm"
+          >
+            <Info class="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div>
+              <p>Référence incomplète. Pour une référence APA complète, renseignez :</p>
+              <ul class="mt-1 list-disc pl-5">
+                <li v-for="label in missing" :key="label">{{ label }}</li>
+              </ul>
+            </div>
+          </div>
+
           <ApaReference :source="preview" />
 
           <Collapsible v-model:open="detailsOpen" class="flex flex-col gap-5">
@@ -334,7 +362,11 @@ const URL_PLACEHOLDER = 'https://…'
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem v-for="type in ACADEMIC_TYPES" :key="type.value" :value="type.value">
+                      <SelectItem
+                        v-for="type in ACADEMIC_TYPES"
+                        :key="type.value"
+                        :value="type.value"
+                      >
                         {{ type.label }}
                       </SelectItem>
                     </SelectContent>
@@ -354,8 +386,8 @@ const URL_PLACEHOLDER = 'https://…'
                     />
                   </FormControl>
                   <FormDescription>
-                    Tel qu’il doit apparaître : en APA, seule la première lettre du titre et des noms
-                    propres prend une majuscule. Les titres importés d’un DOI suivent souvent
+                    Tel qu’il doit apparaître : en APA, seule la première lettre du titre et des
+                    noms propres prend une majuscule. Les titres importés d’un DOI suivent souvent
                     l’usage de l’éditeur : corrigez-les au besoin.
                   </FormDescription>
                   <FormMessage />
@@ -432,7 +464,6 @@ const URL_PLACEHOLDER = 'https://…'
                         :type="field.name === 'url' ? 'url' : 'text'"
                         autocomplete="off"
                         :placeholder="field.placeholder"
-                        :aria-required="required.has(field.name) ? 'true' : undefined"
                         v-bind="componentField"
                       />
                     </FormControl>
@@ -450,7 +481,9 @@ const URL_PLACEHOLDER = 'https://…'
                     <FormControl>
                       <Input type="date" v-bind="componentField" />
                     </FormControl>
-                    <FormDescription>Pour une page dont le contenu change dans le temps.</FormDescription>
+                    <FormDescription
+                      >Pour une page dont le contenu change dans le temps.</FormDescription
+                    >
                     <FormMessage />
                   </FormItem>
                 </FormField>

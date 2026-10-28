@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import { FileText, GraduationCap, LoaderCircle, Search } from '@lucide/vue'
+import { Check, FileText, GraduationCap, LoaderCircle, Search, TriangleAlert } from '@lucide/vue'
 
 import ApaReference from '@/components/ApaReference.vue'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import type { Source, SourceFields } from '@/api/sources'
 import { DoiError, type DoiErrorReason } from '@/api/doi'
 import { extractDoi } from '@/lib/doi'
-import { emptySourceForm, formFromSource, payloadFromForm, sourceFormSchema } from '@/lib/sourceForm'
+import {
+  emptySourceForm,
+  formFromSource,
+  payloadFromForm,
+  sourceFormSchema,
+} from '@/lib/sourceForm'
 import { cn } from '@/lib/utils'
 import { useSourcesStore } from '@/stores/sources'
 
@@ -59,7 +64,8 @@ const doiField = useTemplateRef<{ $el: HTMLInputElement }>('doiField')
 type Lookup =
   | { state: 'idle' }
   | { state: 'loading' }
-  | { state: 'found'; fields: SourceFields }
+  /** `autoAdd`: decided once found, so the new source can't then read as already existing */
+  | { state: 'found'; fields: SourceFields; autoAdd: boolean }
   | { state: 'error'; reason: DoiErrorReason }
 const lookup = ref<Lookup>({ state: 'idle' })
 
@@ -82,7 +88,12 @@ async function runLookup() {
   lookup.value = { state: 'loading' }
   try {
     const fields = await sources.lookupDoi(doi)
-    if (id === lookupId) lookup.value = { state: 'found', fields }
+    if (id !== lookupId) return
+    // On the sources page, looking a DOI up is the intent to add it: no extra click. In the
+    // picker, adding also cites, which changes the particule: that stays the user's click.
+    const autoAdd = !props.cite && !sources.findByDoi(fields.doi ?? doi) && isAddable(fields)
+    lookup.value = { state: 'found', fields, autoAdd }
+    if (autoAdd) await add(fields)
   } catch (error) {
     if (id !== lookupId) return
     lookup.value = {
@@ -97,21 +108,31 @@ function onDoiPaste() {
   void nextTick(runLookup)
 }
 
+/**
+ * The API only needs a title: an import missing authors or a journal is added all the same,
+ * and the editor says what to complete
+ */
+function isAddable(fields: SourceFields) {
+  return sourceFormSchema.safeParse(formFromSource(fields)).success
+}
+
 const found = computed(() => (lookup.value.state === 'found' ? lookup.value.fields : null))
+const autoAdd = computed(() => lookup.value.state === 'found' && lookup.value.autoAdd)
 const existing = computed(() => (found.value?.doi ? sources.findByDoi(found.value.doi) : undefined))
-/** Publishers' metadata may lack what the type needs, e.g. authors */
-const complete = computed(
-  () => !!found.value && sourceFormSchema.safeParse(formFromSource(found.value)).success,
-)
+const addable = computed(() => !!found.value && isAddable(found.value))
 
 const adding = ref(false)
 const addError = ref(false)
+/** Shown until the page opens the new source */
+const added = ref(false)
 
 async function add(fields: SourceFields) {
   adding.value = true
   addError.value = false
   try {
-    emit('created', await sources.create(fields))
+    const source = await sources.create(fields)
+    added.value = true
+    emit('created', source)
   } catch {
     addError.value = true
   } finally {
@@ -224,11 +245,16 @@ const URL_PLACEHOLDER = 'https://…'
       </form>
 
       <div id="quick-add-doi-status" aria-live="polite" class="flex flex-col gap-3">
-        <div v-if="lookup.state === 'loading'" class="flex flex-col gap-2 rounded-lg border p-4">
-          <span class="sr-only">Recherche du DOI…</span>
-          <Skeleton class="h-4 w-full" />
-          <Skeleton class="h-4 w-2/3" />
-        </div>
+        <template v-if="lookup.state === 'loading'">
+          <p class="flex items-center gap-2 text-sm text-muted-foreground">
+            <LoaderCircle class="size-4 animate-spin motion-reduce:animate-none" />
+            Recherche du DOI…
+          </p>
+          <div class="flex flex-col gap-2 rounded-lg border p-4">
+            <Skeleton class="h-4 w-full" />
+            <Skeleton class="h-4 w-2/3" />
+          </div>
+        </template>
 
         <template v-else-if="lookup.state === 'error'">
           <p role="alert" class="text-sm text-destructive">{{ LOOKUP_ERRORS[lookup.reason] }}</p>
@@ -237,13 +263,35 @@ const URL_PLACEHOLDER = 'https://…'
         <template v-else-if="found">
           <ApaReference :source="found" />
 
-          <template v-if="existing">
+          <ol v-if="autoAdd" class="flex flex-col gap-1.5 text-sm" aria-label="Ajout de la source">
+            <li class="flex items-center gap-2 text-muted-foreground">
+              <Check class="size-4" />
+              Référence trouvée
+            </li>
+            <li v-if="adding" class="flex items-center gap-2 text-muted-foreground">
+              <LoaderCircle class="size-4 animate-spin motion-reduce:animate-none" />
+              Ajout de la source…
+            </li>
+            <li v-else-if="added" class="flex items-center gap-2">
+              <Check class="size-4" />
+              Source ajoutée
+            </li>
+            <li v-else-if="addError" class="flex flex-wrap items-center gap-2">
+              <TriangleAlert class="size-4 text-destructive" />
+              <span role="alert" class="text-destructive">L’ajout de la source a échoué.</span>
+              <Button variant="link" class="h-auto p-0 text-sm" @click="add(found)">
+                Réessayer
+              </Button>
+            </li>
+          </ol>
+
+          <template v-else-if="existing">
             <p class="text-sm">Cette source existe déjà.</p>
             <Button class="w-fit" @click="emit('existing', existing)">
               {{ cite ? 'Citer cette source' : 'Ouvrir cette source' }}
             </Button>
           </template>
-          <template v-else-if="complete">
+          <template v-else-if="addable">
             <Button class="w-fit" :disabled="adding" @click="add(found)">
               <LoaderCircle v-if="adding" class="animate-spin" />
               {{ cite ? 'Ajouter et citer' : 'Ajouter' }}
@@ -251,8 +299,7 @@ const URL_PLACEHOLDER = 'https://…'
           </template>
           <template v-else>
             <p class="text-sm">
-              Il manque des informations à cette référence, comme les auteurs : complétez-la
-              avant de l’ajouter.
+              Cette référence n’a pas de titre : complétez-la avant de l’ajouter.
             </p>
             <Button class="w-fit" @click="openManual(found)">Compléter la référence</Button>
           </template>
@@ -328,7 +375,12 @@ const URL_PLACEHOLDER = 'https://…'
       </Button>
     </form>
 
-    <p v-if="addError" role="alert" class="text-sm text-destructive">
+    <!-- An automatic add reports its failure in its own steps -->
+    <p
+      v-if="addError && !(mode === 'academic' && autoAdd)"
+      role="alert"
+      class="text-sm text-destructive"
+    >
       L’ajout de la source a échoué, réessayez.
     </p>
   </div>

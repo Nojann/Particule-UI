@@ -24,8 +24,8 @@ every knowledge base.
 **Entering a source must be fast.** A first version used a single, long APA form for every
 source, and that proved too laborious. Sources now come in two families:
 
-- **Academic sources** are generated from a **DOI**: the user pastes it, sees the APA
-  reference and adds it in one click. The detailed form is still there, folded, to fix what
+- **Academic sources** are generated from a **DOI**: the user pastes it, and on the sources
+  page the source is added as soon as it is found, with each step shown. The detailed form is still there, folded, to fix what
   the DOI's metadata got wrong, or to enter a reference without a DOI by hand.
 - **Other sources** (a video, a podcast, a conversation, a web page…) are minimal: a title,
   an optional link and an optional note. They have no APA reference.
@@ -36,8 +36,9 @@ leaving it.
 This is also the first feature translated with **vue-i18n**.
 
 **AI:** none. The reference is computed by citation-js (CSL) from what the user typed or
-imported. A DOI import fills fields from the publisher's metadata, not from a model, and
-nothing is created before the user clicks « Ajouter ».
+imported. A DOI import fills fields from the publisher's metadata, not from a model. On the
+sources page, pasting the DOI is the user's request to add it; from a particule, nothing is
+created before the user clicks « Ajouter et citer ».
 
 ## API
 
@@ -47,16 +48,21 @@ nothing is created before the user clicks « Ajouter ».
 | ----------------- | ------------------------------------------------------- | --------------------------------- |
 | `type`            | `book`, `journal_article`, `book_chapter`, `web_page`, `other` | yes                        |
 | `title`           | string ≤ 1024                                           | yes                               |
-| `authors`         | free text ≤ 1024                                        | yes, except `other`               |
+| `authors`         | free text ≤ 1024                                        | no                                |
 | `editors`         | free text ≤ 1024                                        | no                                |
-| `container_title` | journal, book or site title ≤ 1024                      | `journal_article`, `book_chapter` |
+| `container_title` | journal, book or site title ≤ 1024                      | no                                |
 | `volume`, `issue`, `pages` | string ≤ 64                                    | no                                |
 | `doi`             | string ≤ 255                                            | no                                |
-| `url`             | string ≤ 2048                                           | `web_page`                        |
+| `url`             | string ≤ 2048                                           | no                                |
 | `published_date`, `accessed_date` | `YYYY-MM-DD`                            | no                                |
 | `year`            | integer, `null` when undated                            | no                                |
 | `edition`, `publisher` | string ≤ 255                                       | no                                |
 | `note`            | free text                                               | no                                |
+
+Since back end commit `a9e189a` ("require only title on sources", branch
+`feat/source-title-only`), only `type` and `title` are required, for every type, so a
+source can be recorded before every detail is known. **This front end change ships once
+that branch is merged.**
 
 Server rules the client must respect:
 
@@ -74,7 +80,7 @@ Added by back end commit `99c87ad` ("add other type in source"):
 | Change           | Detail                                                                    |
 | ---------------- | ------------------------------------------------------------------------- |
 | `type: "other"`  | a catch-all that needs only `title`. The front end sends `url` and `note`, and `null` for every other field |
-| `authors`        | nullable; required for every type except `other`                          |
+| `authors`        | nullable; optional on every type since `a9e189a`                          |
 | `note`           | free text with no length limit, nullable, on **every** type: the user's own words about the source |
 
 ## DOI resolution
@@ -117,8 +123,9 @@ mapped:
 - Known limit: for some chapters, Crossref gives the series as `container-title` (e.g.
   « Use R! ») instead of the book's title. The user fixes it in « Corriger les
   informations ».
-- An import that misses a required field (often the authors) can't be added as it is:
-  « Compléter la référence » opens the full form, prefilled.
+- An import that lacks what APA needs (often the authors) is added all the same, and the
+  editor says what to complete. Only an import with no title can't be added: « Compléter
+  la référence » opens the full form, prefilled.
 
 ## Names: APA constraints on the front end
 
@@ -145,7 +152,8 @@ The contributor list supports:
 
 ### Validation (zod)
 
-- At least one author. Editors are optional.
+- Authors and editors are optional: the API only needs a title. What APA still lacks is
+  listed by `missingForApa`, which asks for it without blocking the save.
 - A person needs a family name; a group needs a name.
 - Each name part is trimmed. Spaces inside a part are collapsed.
 - `;` is forbidden in every part, and `,` in a family name or a group name: these are the
@@ -201,13 +209,13 @@ Route names, paths and query parameters are in English.
 1. **Browse.** From the sidebar, « Sources » opens the sources page: a list of sources and,
    once one is chosen, its editor.
 2. **Add from a DOI.** « Nouvelle source » opens the quick add, on « Académique ». The user
-   pastes a DOI (or a doi.org link), sees the APA reference and clicks « Ajouter ». The
-   source opens.
+   pastes a DOI (or a doi.org link). The APA reference shows, the source is added right
+   away (« Référence trouvée », « Ajout de la source… ») and opens.
 3. **Add another source.** In the quick add, « Autre » asks for a title, a link and a note,
    then « Ajouter ».
 4. **Add by hand.** For an academic source with no DOI, « Saisir la référence à la main »
-   opens the full form. The source is created on the server as soon as its required fields
-   are valid, without a save button.
+   opens the full form, with no author row yet. The source is created on the server as
+   soon as it has a title, without a save button.
 5. **Edit.** Every change is saved automatically. An academic source shows its APA
    reference first; « Corriger les informations » unfolds the form, and the reference
    updates as the user types.
@@ -251,8 +259,16 @@ Route names, paths and query parameters are in English.
   - Pasting, or Enter, starts the lookup. A DOI is found inside pasted text or a
     `doi.org` / `dx.doi.org` link.
   - While it loads, a skeleton shows.
-  - Then the APA reference shows, with « Ajouter ». **Nothing is created before that
-    click.**
+  - Then the APA reference shows. On the sources page, a complete import that no source
+    has yet is **added at once**, with its steps listed in the `aria-live` status region:
+    « Référence trouvée », then « Ajout de la source… », then « Source ajoutée ». A failed
+    add shows « L’ajout de la source a échoué. » with « Réessayer ». A lookup the user has
+    replaced never creates a source.
+  - In the picker, adding also cites, which changes the particule: the reference shows with
+    « Ajouter et citer », and **nothing is created before that click**.
+  - An import that lacks authors or a journal is added all the same (« Ajouter et citer »
+    in the picker). Only an import with no title isn't: « Cette référence n’a pas de
+    titre : complétez-la avant de l’ajouter. » with « Compléter la référence ».
   - If a source already has this DOI: « Cette source existe déjà. » with « Ouvrir cette
     source » (« Citer cette source » in the picker), and no « Ajouter ».
   - Errors: « Ce n’est pas un DOI valide. », « Ce DOI est introuvable. », « Impossible de
@@ -262,7 +278,7 @@ Route names, paths and query parameters are in English.
       « Ajouter ». Pasting a DOI in the title or the link offers to switch to « Académique ».
 - [ ] « Saisir la référence à la main » opens the full form (`/app/sources?new&manual`), as
       the first version did.
-- [ ] After « Ajouter », the URL switches to the new source's id and its editor opens.
+- [ ] Once added, the URL switches to the new source's id and its editor opens.
 
 ### Editor
 
@@ -285,8 +301,13 @@ Route names, paths and query parameters are in English.
       | Page web           | site name, URL, accessed date                            |
 
 - [ ] Authors and editors follow the [name constraints](#names-apa-constraints-on-the-front-end).
-- [ ] Required fields follow the server rules. A missing or invalid field shows its message
-      under the field once it has been touched.
+- [ ] Only the title is required, as on the server. A missing title or an invalid value
+      shows its message under the field once it has been touched.
+- [ ] **Incomplete reference.** When an academic source lacks what APA needs (authors; the
+      journal or book title for an article or chapter; the URL for a web page), a notice
+      above the reference reads « Référence incomplète. Pour une référence APA complète,
+      renseignez : » with the list of the missing fields' labels (`role="status"`). The
+      source still saves, and « Corriger les informations » starts unfolded.
 - [ ] Changing the type keeps the values already typed.
 - [ ] Date: either a year or a full publication date. When `published_date` is set, the
       year is derived from it and can't be edited. With neither, the date reads « s.d. ».
@@ -297,7 +318,8 @@ Route names, paths and query parameters are in English.
   - leaving the editor saves at once;
   - the browser warns before closing with unsaved changes.
 - [ ] Nothing is sent while the form is invalid:
-  - an invalid form shows « Champs requis manquants » instead of « Enregistré »;
+  - an invalid form (no title, or a malformed value) shows « Champs requis manquants »
+    instead of « Enregistré »;
   - a server error shows « Échec de l’enregistrement » with « Réessayer ».
 - [ ] A new source is created on the server when it first becomes valid. The URL then
       switches to its id without losing focus.
@@ -475,7 +497,8 @@ Recorded as follow-up issues:
 - **`src/lib/cslImport.ts`:** `sourceFromCsl(item)` → `SourceFields`, following
   [the mapping](#doi-resolution).
 - **`src/lib/sourceForm.ts`:** the `other` type, `ACADEMIC_TYPES` for the type select, the
-  `note` field; authors are required for academic types only.
+  `note` field; only the title is required, and `missingForApa` lists what the APA
+  reference lacks.
 - **New components:**
   - `SourcesView` and `SourceList`;
   - `SourceQuickAdd`, used on the page and in the picker;
@@ -498,7 +521,7 @@ Recorded as follow-up issues:
   - validation: forbidden `;` and `,`, empty family name, given names with digits;
   - `inTextLabel` for 1, 2 and 3+ authors, a group author and an undated source.
 - `src/lib/__tests__/sourceForm.spec.ts`
-  - required fields per type;
+  - only the title is required, for every type; `missingForApa` per type;
   - the payload: empty strings become `null`, `year` comes from `published_date`,
     contributors are serialised;
   - the diff holds only the changed fields;
@@ -542,7 +565,9 @@ Recorded as follow-up issues:
 - `src/lib/__tests__/sourceForm.spec.ts`: an other source is valid without authors; `note`
   in the payload and the diff.
 - `src/components/__tests__/SourceQuickAdd.spec.ts`
-  - no `POST` before « Ajouter »;
+  - on the sources page, a found DOI is created without a click, with its steps shown;
+  - a failed add offers « Réessayer »; a replaced lookup never creates;
+  - in the picker, no `POST` before « Ajouter et citer »;
   - the « already exists » message;
   - each lookup error;
   - « Autre » requires a title.
@@ -555,8 +580,8 @@ doi.org is mocked with `page.route('https://doi.org/**')`, returning CSL-JSON mo
 
 - `e2e/sources.spec.ts`
   1. Open « Sources » from the sidebar.
-  2. « Nouvelle source », paste a DOI, see the APA reference, « Ajouter ». The URL now
-     holds the source's id.
+  2. « Nouvelle source », paste a DOI, see the APA reference; the source is added without
+     a click and the URL now holds its id.
   3. « Corriger les informations »: fix the title's case and see the reference change.
   4. Copy the reference (clipboard permission granted).
   5. Add an « Autre » source with a title and a link.

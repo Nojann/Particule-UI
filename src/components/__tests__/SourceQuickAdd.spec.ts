@@ -63,20 +63,21 @@ describe('SourceQuickAdd', () => {
     document.body.innerHTML = ''
   })
 
-  it('looks up a pasted DOI, and creates the source only on « Ajouter »', async () => {
-    fetchMock.mockResolvedValueOnce(Response.json(crossrefArticle))
+  it('adds the source as soon as its DOI is found, showing each step', async () => {
+    const created = { ...crossrefArticle, id: 's1', owner_id: 'u1' }
+    let respond!: (response: Response) => void
+    fetchMock
+      .mockResolvedValueOnce(Response.json(crossrefArticle))
+      .mockReturnValueOnce(new Promise((resolve) => (respond = resolve)))
     const { wrapper } = await mountQuickAdd()
 
     await pasteDoi(wrapper, `https://doi.org/${DOI}`)
 
     expect(String(fetchMock.mock.calls[0]![0])).toBe(`https://doi.org/${DOI}`)
     expect(wrapper.find('apa-reference-stub').exists()).toBe(true)
-    expect(apiCalls(fetchMock)).toHaveLength(0)
-
-    const created = { ...crossrefArticle, id: 's1', owner_id: 'u1' }
-    fetchMock.mockResolvedValueOnce(jsonResponse(201, created))
-    await button(wrapper, 'Ajouter')!.trigger('click')
-    await flushPromises()
+    expect(wrapper.text()).toContain('Référence trouvée')
+    expect(wrapper.text()).toContain('Ajout de la source…')
+    expect(button(wrapper, 'Ajouter')).toBeUndefined()
 
     const [url, init] = apiCalls(fetchMock)[0]!
     expect(String(url)).toMatch(/\/sources\/$/)
@@ -86,7 +87,64 @@ describe('SourceQuickAdd', () => {
       authors: 'Feynman, R. P.',
       doi: DOI,
     })
+
+    respond(jsonResponse(201, created))
+    await flushPromises()
+
+    expect(apiCalls(fetchMock)).toHaveLength(1)
     expect(wrapper.emitted('created')?.[0]).toEqual([created])
+    // The new source has this DOI now, but it must not read as « already exists »
+    expect(wrapper.text()).toContain('Source ajoutée')
+    expect(wrapper.text()).not.toContain('Cette source existe déjà.')
+  })
+
+  it('offers to retry an automatic add that failed', async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json(crossrefArticle))
+      .mockResolvedValueOnce(jsonResponse(500, { detail: 'Boom' }))
+    const { wrapper } = await mountQuickAdd()
+    await pasteDoi(wrapper, DOI)
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('L’ajout de la source a échoué.')
+    expect(wrapper.emitted('created')).toBeUndefined()
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(201, { ...crossrefArticle, id: 's1' }))
+    await button(wrapper, 'Réessayer')!.trigger('click')
+    await flushPromises()
+
+    expect(apiCalls(fetchMock)).toHaveLength(2)
+    expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('never adds from a lookup the user has since replaced', async () => {
+    let respond!: (response: Response) => void
+    fetchMock
+      .mockReturnValueOnce(new Promise((resolve) => (respond = resolve)))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+    const { wrapper } = await mountQuickAdd()
+
+    await pasteDoi(wrapper, DOI)
+    await pasteDoi(wrapper, '10.9999/inconnu')
+    respond(Response.json(crossrefArticle))
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toBe('Ce DOI est introuvable.')
+    expect(apiCalls(fetchMock)).toHaveLength(0)
+  })
+
+  it('waits for « Ajouter et citer » in the picker, since citing changes the particule', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json(crossrefArticle))
+    const { wrapper } = await mountQuickAdd({ cite: true })
+
+    await pasteDoi(wrapper, DOI)
+    expect(apiCalls(fetchMock)).toHaveLength(0)
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(201, { ...crossrefArticle, id: 's1' }))
+    await button(wrapper, 'Ajouter et citer')!.trigger('click')
+    await flushPromises()
+
+    expect(apiCalls(fetchMock)[0]![1]?.method).toBe('POST')
+    expect(wrapper.emitted('created')).toHaveLength(1)
   })
 
   it('says so when the DOI is already a source, and offers it instead', async () => {
@@ -97,6 +155,7 @@ describe('SourceQuickAdd', () => {
 
     await pasteDoi(wrapper, DOI)
 
+    expect(apiCalls(fetchMock)).toHaveLength(0)
     expect(wrapper.text()).toContain('Cette source existe déjà.')
     expect(button(wrapper, 'Ajouter et citer')).toBeUndefined()
     await button(wrapper, 'Citer cette source')!.trigger('click')
@@ -126,16 +185,38 @@ describe('SourceQuickAdd', () => {
     expect(button(wrapper, 'Saisir la référence à la main')).toBeDefined()
   })
 
-  it('hands an incomplete import to the full form', async () => {
+  it('adds an import that lacks its authors, to be completed later', async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ ...crossrefArticle, author: [] }))
+      .mockResolvedValueOnce(jsonResponse(201, { ...crossrefArticle, id: 's1', authors: null }))
+    const { wrapper } = await mountQuickAdd()
+    await pasteDoi(wrapper, DOI)
+
+    const [, init] = apiCalls(fetchMock)[0]!
+    expect(JSON.parse(init!.body as string)).toMatchObject({ doi: DOI, authors: null })
+    expect(wrapper.emitted('created')).toHaveLength(1)
+  })
+
+  it('offers « Ajouter et citer » for an incomplete import in the picker', async () => {
     fetchMock.mockResolvedValueOnce(Response.json({ ...crossrefArticle, author: [] }))
+    const { wrapper } = await mountQuickAdd({ cite: true })
+    await pasteDoi(wrapper, DOI)
+
+    expect(apiCalls(fetchMock)).toHaveLength(0)
+    expect(button(wrapper, 'Ajouter et citer')).toBeDefined()
+  })
+
+  it('hands an import without a title to the full form', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ ...crossrefArticle, title: [] }))
     const { wrapper, router } = await mountQuickAdd()
     await pasteDoi(wrapper, DOI)
 
-    expect(button(wrapper, 'Ajouter')).toBeUndefined()
+    expect(apiCalls(fetchMock)).toHaveLength(0)
+    expect(wrapper.text()).toContain('Cette référence n’a pas de titre')
     await button(wrapper, 'Compléter la référence')!.trigger('click')
     await flushPromises()
 
-    expect(useSourcesStore().draft).toMatchObject({ doi: DOI, authors: null })
+    expect(useSourcesStore().draft).toMatchObject({ doi: DOI, title: '' })
     expect(router.currentRoute.value.query).toEqual({ new: null, manual: null })
   })
 
@@ -169,7 +250,9 @@ describe('SourceQuickAdd', () => {
   })
 
   it('offers to import a DOI typed as an other source', async () => {
-    fetchMock.mockResolvedValueOnce(Response.json(crossrefArticle))
+    fetchMock
+      .mockResolvedValueOnce(Response.json(crossrefArticle))
+      .mockResolvedValueOnce(jsonResponse(201, { ...crossrefArticle, id: 's1' }))
     const { wrapper } = await mountQuickAdd()
     await wrapper.findAll('[role="radio"]')[1]!.trigger('click')
 

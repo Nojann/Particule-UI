@@ -129,9 +129,9 @@ describe('sourceFromCsl', () => {
     expect(isValid(source)).toBe(true)
   })
 
-  it('leaves authors empty when the metadata has none, so the form asks for them', () => {
+  it('leaves authors empty when the metadata has none, and the source can still be added', () => {
     const source = sourceFromCsl({ ...crossrefArticle, author: undefined })
     expect(source.authors).toBeNull()
-    expect(isValid(source)).toBe(false)
+    expect(isValid(source)).toBe(true)
   })
 })

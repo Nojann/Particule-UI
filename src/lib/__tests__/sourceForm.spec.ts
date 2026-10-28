@@ -5,6 +5,7 @@ import {
   changedFields,
   emptySourceForm,
   formFromSource,
+  missingForApa,
   payloadFromForm,
   sourceFormSchema,
   toCsl,
@@ -46,15 +47,16 @@ function errorPaths(values: SourceFormValues) {
 }
 
 describe('sourceFormSchema', () => {
-  it('requires a title and an author', () => {
-    expect(errorPaths(form({ title: ' ', authors: [] }))).toEqual(['title', 'authors'])
+  it('requires only a title, as the API does', () => {
+    expect(errorPaths(form({ title: ' ', authors: [] }))).toEqual(['title'])
+    for (const type of ['book', 'journal_article', 'book_chapter', 'web_page'] as const) {
+      expect(errorPaths(form({ type, authors: [] }))).toEqual([])
+    }
   })
 
-  it('requires the fields of each type, as the API does', () => {
-    expect(errorPaths(form({ type: 'book' }))).toEqual([])
-    expect(errorPaths(form({ type: 'journal_article' }))).toEqual(['container_title'])
-    expect(errorPaths(form({ type: 'book_chapter' }))).toEqual(['container_title'])
-    expect(errorPaths(form({ type: 'web_page' }))).toEqual(['url'])
+  it('starts a new source without an author row, so a title alone saves', () => {
+    expect(emptySourceForm().authors).toEqual([])
+    expect(errorPaths({ ...emptySourceForm(), title: 'Lectures' })).toEqual([])
   })
 
   it('checks years, dates and URLs', () => {
@@ -170,6 +172,27 @@ describe('normalizeDoi', () => {
     ]) {
       expect(normalizeDoi(doi)).toBe('10.1/x')
     }
+  })
+})
+
+describe('missingForApa', () => {
+  it('lists what the reference of each type lacks, in form order', () => {
+    expect(missingForApa(form({ type: 'book' }))).toEqual([])
+    expect(missingForApa(form({ type: 'book', authors: [] }))).toEqual(['authors'])
+    expect(missingForApa(form({ type: 'journal_article', authors: [] }))).toEqual([
+      'authors',
+      'container_title',
+    ])
+    expect(missingForApa(form({ type: 'book_chapter', container_title: ' ' }))).toEqual([
+      'container_title',
+    ])
+    expect(missingForApa(form({ type: 'web_page', container_title: 'Wikipédia' }))).toEqual([
+      'url',
+    ])
+  })
+
+  it('asks nothing of an other source', () => {
+    expect(missingForApa({ ...emptySourceForm('other'), title: 'Conférence' })).toEqual([])
   })
 })
 

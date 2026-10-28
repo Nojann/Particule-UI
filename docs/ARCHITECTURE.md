@@ -204,8 +204,8 @@ failing to load them is not fatal on the particules screen.
 - `findByDoi()` compares normalised, case-insensitive DOIs, so the quick add can
   offer an existing source instead of a duplicate.
 - `lookupDoi()` delegates to `api/doi.ts`. It saves nothing.
-- `draft` hands an imported source that misses a required field from the quick add
-  to the full form on the sources page.
+- `draft` hands an imported source with no title from the quick add to the full form
+  on the sources page.
 
 There are two families of sources. **Academic** types (`book`, `journal_article`,
 `book_chapter`, `web_page`) have authors and an APA reference. **`other`** (a video, a
@@ -249,10 +249,11 @@ SourcesView                    loads the sources, one pane at a time on mobile
 ```
 
 - **Quick add first.** Entering a full APA form is slow, so a new source starts from
-  `SourceQuickAdd`. A pasted DOI is looked up and its APA reference shown; nothing is
-  created before « Ajouter ». The full form stays one link away, for a reference
-  without a DOI. The same component runs in the `SourcePicker` popover, where its
-  button reads « Ajouter et citer ».
+  `SourceQuickAdd`. A pasted DOI is looked up, its APA reference shown and, on the
+  sources page, the source added at once with its steps listed (an import with no title
+  goes to the full form instead). The full form stays one link away, for a reference
+  without a DOI. The same component runs in the `SourcePicker` popover, where adding
+  also cites, so it waits for « Ajouter et citer ».
 - **Reference first.** For an academic source, `SourceEditor` shows the reference,
   then the form in a collapsible « Corriger les informations ». It starts folded for a
   saved, valid source, and unfolds on its own when a save finds the form invalid. An
@@ -260,7 +261,9 @@ SourcesView                    loads the sources, one pane at a time on mobile
 - **Saved only when valid.** `SourceEditor` autosaves like `ParticuleEditor` (1 s
   debounce, one save at a time, `PATCH` of the changed fields, save on unmount), but
   sends nothing while the zod schema refuses the form: a new source is created on the
-  server the first time it is valid.
+  server the first time it is valid. As on the server, only the title is required;
+  `missingForApa` lists what the APA reference still lacks, shown as a notice that
+  never blocks the save.
 - **citation-js** is only imported by `lib/citation.ts`, dynamically, the first time a
   reference is shown. Its HTML output is reduced to text and italics, and rendered
   without `v-html`.
